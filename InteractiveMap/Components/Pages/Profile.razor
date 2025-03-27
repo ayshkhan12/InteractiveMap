@@ -1,34 +1,27 @@
 ﻿@page "/profile"
-@using InteractiveMap.Models
+@inject InteractiveMap.Models.ApplicationDbContext DbContext
 
 <h3>Profile Page</h3>
 
-@if (user != null)
+@if (user == null)
 {
-    <div class="profile-container">
-        <img src="@user.ProfilePicture" alt="Profile Picture" class="profile-pic" />
-        <h4>@user.Name</h4>
-        <p><strong>Email:</strong> @user.Email</p>
-
-        <button @onclick="EditProfile">Edit Profile</button>
-    </div>
+    <p>Loading...</p>
 }
 else
 {
-    <p>Loading user profile...</p>
+    <div>
+        <img src="@user.ProfilePicture" alt="Profile Picture" width="150" />
+        <h2>@user.Name</h2>
+        <p>Email: @user.Email</p>
+        <p>@user.Bio</p>
+    </div>
 }
 
 @code {
-    private User user = new User
-        {
-            Name = "John Doe",
-            Email = "johndoe@email.com",
-            ProfilePicture = "https://via.placeholder.com/150"
-        };
+    private User? user;
 
-    private void EditProfile()
+    protected override async Task OnInitializedAsync()
     {
-        // Navigate to an edit page or enable form inputs
-        Console.WriteLine("Edit Profile Clicked");
+        user = await Task.Run(() => DbContext.Users.FirstOrDefault());
     }
 }
