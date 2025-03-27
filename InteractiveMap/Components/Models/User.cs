@@ -1,5 +1,4 @@
-﻿namespace InteractiveMap.Models
-    using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace InteractiveMap.Models
 {
