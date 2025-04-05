@@ -118,6 +118,41 @@
             background-color: rgba(0, 80, 158, 0.7);
             border-radius: 3px;
         }
+        /* New styles for mode panels */
+        .mode-toggle {
+            background: #00509E;
+            color: white;
+            text-align: center;
+            margin: 5px 0;
+        }
+        .mode-panel {
+            padding: 10px;
+            background: #f0f7ff;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .mode-panel label {
+            display: block;
+            margin: 8px 0;
+            cursor: pointer;
+        }
+        #emergency-call {
+            background: #ff0000;
+            color: white;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        /* Accessibility route styling */
+        .accessibility-route {
+            stroke-color: #2ECC71;
+            stroke-width: 6;
+            stroke-opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -144,6 +179,37 @@
             </div>
             <div id="directions-instructions"></div>
             <div id="distance-info"></div>
+        </div>
+        
+        <!-- New Mode Selection -->
+        <div class="category">NAVIGATION MODES</div>
+        <button id="study-mode-btn" class="mode-toggle">🎓 Study Mode</button>
+        <button id="accessibility-mode-btn" class="mode-toggle">♿ Accessibility</button>
+        <button id="emergency-mode-btn" class="mode-toggle">🚨 Emergency</button>
+
+        <!-- Study Mode Panel -->
+        <div id="study-panel" class="mode-panel" style="display:none;">
+            <input type="text" id="room-search" placeholder="Enter room code (e.g. LB101)">
+            <div id="room-results"></div>
+        </div>
+
+        <!-- Accessibility Options Panel -->
+        <div id="accessibility-panel" class="mode-panel" style="display:none;">
+            <label>
+                <input type="checkbox" id="wheelchair-route" checked> 
+                Wheelchair accessible routes only
+            </label>
+            <label>
+                <input type="checkbox" id="avoid-stairs" checked> 
+                Avoid stairs
+            </label>
+        </div>
+
+        <!-- Emergency Panel -->
+        <div id="emergency-panel" class="mode-panel" style="display:none;">
+            <button id="find-security">Find Security Office</button>
+            <button id="find-medical">Find Medical Help</button>
+            <button id="emergency-call">Call Campus Security</button>
         </div>
         
         <!-- Building Categories -->
@@ -187,30 +253,238 @@
         let userLocationMarker;
         let selectedBuilding = null;
         let isSatelliteView = false;
+        let currentMode = null;
+        let accessibilityOptions = {
+            wheelchair: true,
+            avoidStairs: true
+        };
 
-        // All buildings data
+        // Enhanced buildings data
         const BUILDINGS = [
-            // Academic (Blue)
-            { lat: 53.771112, lng: -0.369320, title: "Brynmor Jones Library", color: "#00509E", category: "Academic" },
-            { lat: 53.770998, lng: -0.370300, title: "Allam Medical Building", color: "#00509E", category: "Academic" },
-            { lat: 53.770821, lng: -0.366477, title: "Wilberforce Building", color: "#00509E", category: "Academic" },
-            { lat: 53.770330, lng: -0.368166, title: "Larkin Building", color: "#00509E", category: "Academic" },
-            { lat: 53.771509, lng: -0.368860, title: "Robert Blackburn Building", color: "#00509E", category: "Academic" },
-            
-            // Masjid (Green)
-            { lat: 53.772666, lng: -0.365194, title: "Masjid Hull University", color: "#2ECC71", category: "Student Life" },
-            
-            // Student Life (Gold)
-            { lat: 53.771961, lng: -0.366254, title: "Student Union (Asylum)", color: "#F1C40F", category: "Student Life" },
-            { lat: 53.771715, lng: -0.366143, title: "Wetherspoons (Sanctuary)", color: "#F1C40F", category: "Student Life" },
-            
-            // Accommodations (Red)
-            { lat: 53.772658, lng: -0.366401, title: "The Courtyard", color: "#E74C3C", category: "Accommodations" },
-            { lat: 53.771534, lng: -0.372415, title: "Westfield Court", color: "#E74C3C", category: "Accommodations" },
-            { lat: 53.770757, lng: -0.364416, title: "Taylor Court", color: "#E74C3C", category: "Accommodations" },
-            
-            // Sports (Orange)
-            { lat: 53.774024, lng: -0.368526, title: "Allam Sports Centre", color: "#E67E22", category: "Sports" }
+            {
+                id: "LIB-01",
+                title: "Brynmor Jones Library",
+                lat: 53.771112,
+                lng: -0.369320,
+                color: "#00509E",
+                category: "Academic",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                rooms: ["LB101", "LB202", "LB305"],
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "MED-01",
+                title: "Allam Medical Building",
+                lat: 53.770998,
+                lng: -0.370300,
+                color: "#00509E",
+                category: "Academic",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: true,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "WIL-01",
+                title: "Wilberforce Building",
+                lat: 53.770821,
+                lng: -0.366477,
+                color: "#00509E",
+                category: "Academic",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: false,
+                    accessibleRestrooms: true
+                },
+                rooms: ["WB101", "WB201"],
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "LAR-01",
+                title: "Larkin Building",
+                lat: 53.770330,
+                lng: -0.368166,
+                color: "#00509E",
+                category: "Academic",
+                accessibility: {
+                    wheelchair: false,
+                    elevator: false,
+                    accessibleRestrooms: false
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: false
+                }
+            },
+            {
+                id: "ROB-01",
+                title: "Robert Blackburn Building",
+                lat: 53.771509,
+                lng: -0.368860,
+                color: "#00509E",
+                category: "Academic",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "MAS-01",
+                title: "Masjid Hull University",
+                lat: 53.772666,
+                lng: -0.365194,
+                color: "#2ECC71",
+                category: "Student Life",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: false,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: false
+                }
+            },
+            {
+                id: "UNI-01",
+                title: "Student Union (Asylum)",
+                lat: 53.771961,
+                lng: -0.366254,
+                color: "#F1C40F",
+                category: "Student Life",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "WET-01",
+                title: "Wetherspoons (Sanctuary)",
+                lat: 53.771715,
+                lng: -0.366143,
+                color: "#F1C40F",
+                category: "Student Life",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: false,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: false
+                }
+            },
+            {
+                id: "COU-01",
+                title: "The Courtyard",
+                lat: 53.772658,
+                lng: -0.366401,
+                color: "#E74C3C",
+                category: "Accommodations",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "WES-01",
+                title: "Westfield Court",
+                lat: 53.771534,
+                lng: -0.372415,
+                color: "#E74C3C",
+                category: "Accommodations",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "TAY-01",
+                title: "Taylor Court",
+                lat: 53.770757,
+                lng: -0.364416,
+                color: "#E74C3C",
+                category: "Accommodations",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: false,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: false,
+                    hasEmergencyPhone: true
+                }
+            },
+            {
+                id: "SPO-01",
+                title: "Allam Sports Centre",
+                lat: 53.774024,
+                lng: -0.368526,
+                color: "#E67E22",
+                category: "Sports",
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true,
+                    accessibleRestrooms: true
+                },
+                emergency: {
+                    isFirstAidCenter: true,
+                    hasEmergencyPhone: true
+                }
+            }
+        ];
+
+        // Emergency facilities data
+        const EMERGENCY_FACILITIES = [
+            {
+                id: "SEC-01",
+                title: "Security Office",
+                lat: 53.771500,
+                lng: -0.368500,
+                type: "security"
+            },
+            {
+                id: "FIR-01",
+                title: "First Aid Station",
+                lat: 53.770998,
+                lng: -0.370300,
+                type: "medical"
+            }
         ];
 
         function initMap() {
@@ -281,6 +555,29 @@
                 
                 marker.addListener("mouseout", () => {
                     label.close();
+                });
+
+                // Add click listener for more info
+                marker.addListener("click", () => {
+                    showBuildingInfo(location);
+                });
+            });
+
+            // Add emergency facility markers
+            EMERGENCY_FACILITIES.forEach(facility => {
+                new google.maps.Marker({
+                    position: { lat: facility.lat, lng: facility.lng },
+                    map: map,
+                    title: facility.title,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: "#FF0000",
+                        fillOpacity: 0.9,
+                        strokeColor: "#FFFFFF",
+                        strokeWeight: 2,
+                        scale: 8
+                    },
+                    zIndex: google.maps.Marker.MAX_ZINDEX + 2
                 });
             });
 
@@ -359,8 +656,170 @@
                 });
             });
 
+            // New mode toggle buttons
+            document.getElementById('study-mode-btn').addEventListener('click', toggleStudyMode);
+            document.getElementById('accessibility-mode-btn').addEventListener('click', toggleAccessibilityMode);
+            document.getElementById('emergency-mode-btn').addEventListener('click', toggleEmergencyMode);
+            document.getElementById('wheelchair-route').addEventListener('change', updateAccessibilityOptions);
+            document.getElementById('avoid-stairs').addEventListener('change', updateAccessibilityOptions);
+            document.getElementById('find-security').addEventListener('click', findSecurity);
+            document.getElementById('find-medical').addEventListener('click', findMedical);
+            document.getElementById('emergency-call').addEventListener('click', callSecurity);
+            document.getElementById('room-search').addEventListener('input', searchRooms);
+
             // Initial location attempt
             getUserLocation(false);
+        }
+
+        function toggleStudyMode() {
+            if (currentMode === 'study') {
+                currentMode = null;
+                document.getElementById('study-panel').style.display = 'none';
+                document.getElementById('study-mode-btn').style.backgroundColor = '#00509E';
+            } else {
+                currentMode = 'study';
+                document.getElementById('study-panel').style.display = 'block';
+                document.getElementById('study-mode-btn').style.backgroundColor = '#003366';
+                // Hide other panels
+                document.getElementById('accessibility-panel').style.display = 'none';
+                document.getElementById('emergency-panel').style.display = 'none';
+                // Reset other mode buttons
+                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#00509E';
+                document.getElementById('emergency-mode-btn').style.backgroundColor = '#00509E';
+            }
+        }
+
+        function toggleAccessibilityMode() {
+            if (currentMode === 'accessibility') {
+                currentMode = null;
+                document.getElementById('accessibility-panel').style.display = 'none';
+                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#00509E';
+            } else {
+                currentMode = 'accessibility';
+                document.getElementById('accessibility-panel').style.display = 'block';
+                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#003366';
+                // Hide other panels
+                document.getElementById('study-panel').style.display = 'none';
+                document.getElementById('emergency-panel').style.display = 'none';
+                // Reset other mode buttons
+                document.getElementById('study-mode-btn').style.backgroundColor = '#00509E';
+                document.getElementById('emergency-mode-btn').style.backgroundColor = '#00509E';
+            }
+        }
+
+        function toggleEmergencyMode() {
+            if (currentMode === 'emergency') {
+                currentMode = null;
+                document.getElementById('emergency-panel').style.display = 'none';
+                document.getElementById('emergency-mode-btn').style.backgroundColor = '#00509E';
+            } else {
+                currentMode = 'emergency';
+                document.getElementById('emergency-panel').style.display = 'block';
+                document.getElementById('emergency-mode-btn').style.backgroundColor = '#003366';
+                // Hide other panels
+                document.getElementById('study-panel').style.display = 'none';
+                document.getElementById('accessibility-panel').style.display = 'none';
+                // Reset other mode buttons
+                document.getElementById('study-mode-btn').style.backgroundColor = '#00509E';
+                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#00509E';
+            }
+        }
+
+        function updateAccessibilityOptions() {
+            accessibilityOptions = {
+                wheelchair: document.getElementById('wheelchair-route').checked,
+                avoidStairs: document.getElementById('avoid-stairs').checked
+            };
+            // Recalculate route if one is active
+            if (selectedBuilding && userLocationMarker) {
+                calculateAndDisplayRoute(selectedBuilding, 'WALKING');
+            }
+        }
+
+        function searchRooms() {
+            const query = document.getElementById('room-search').value.toUpperCase();
+            const resultsDiv = document.getElementById('room-results');
+            resultsDiv.innerHTML = '';
+            
+            if (query.length < 2) return;
+            
+            BUILDINGS.forEach(building => {
+                if (building.rooms) {
+                    building.rooms.forEach(room => {
+                        if (room.includes(query)) {
+                            const result = document.createElement('div');
+                            result.className = 'search-result';
+                            result.textContent = `${room} - ${building.title}`;
+                            result.addEventListener('click', () => {
+                                centerAndPulse(
+                                    { lat: building.lat, lng: building.lng },
+                                    `${building.title} - ${room}`
+                                );
+                                document.getElementById('room-search').value = room;
+                                resultsDiv.style.display = 'none';
+                            });
+                            resultsDiv.appendChild(result);
+                        }
+                    });
+                }
+            });
+            
+            if (resultsDiv.children.length > 0) {
+                resultsDiv.style.display = 'block';
+            }
+        }
+
+        function findSecurity() {
+            const security = EMERGENCY_FACILITIES.find(f => f.type === 'security');
+            if (security) {
+                centerAndPulse(
+                    { lat: security.lat, lng: security.lng },
+                    security.title
+                );
+                // Show directions if user location is available
+                if (userLocationMarker) {
+                    selectedBuilding = security;
+                    showDirectionsPanel();
+                }
+            }
+        }
+
+        function findMedical() {
+            const medical = BUILDINGS.find(b => b.emergency && b.emergency.isFirstAidCenter);
+            if (medical) {
+                centerAndPulse(
+                    { lat: medical.lat, lng: medical.lng },
+                    medical.title
+                );
+                if (userLocationMarker) {
+                    selectedBuilding = medical;
+                    showDirectionsPanel();
+                }
+            }
+        }
+
+        function callSecurity() {
+            if (confirm('Call Campus Security?\n\nPhone: +44 (0)1482 466999')) {
+                window.location.href = 'tel:+441482466999';
+            }
+        }
+
+        function showBuildingInfo(building) {
+            const content = `
+                <div style="max-width:250px">
+                    <h3 style="margin:0 0 10px 0;color:#00509E">${building.title}</h3>
+                    ${building.rooms ? `<p><strong>Rooms:</strong> ${building.rooms.join(', ')}</p>` : ''}
+                    <p><strong>Accessibility:</strong> 
+                        ${building.accessibility.wheelchair ? '♿ Wheelchair accessible' : 'Not wheelchair accessible'}
+                        ${building.accessibility.elevator ? ' | Elevator available' : ''}
+                    </p>
+                    ${building.emergency.hasEmergencyPhone ? '<p>🆘 Emergency phone available</p>' : ''}
+                </div>
+            `;
+            
+            new google.maps.InfoWindow({
+                content: content
+            }).open(map, new google.maps.LatLng(building.lat, building.lng));
         }
 
         function getUserLocation(forceShow) {
@@ -523,11 +982,41 @@
             const request = {
                 origin: userLocationMarker.getPosition(),
                 destination: new google.maps.LatLng(destination.lat, destination.lng),
-                travelMode: google.maps.TravelMode[mode]
+                travelMode: google.maps.TravelMode[mode],
+                // Add accessibility options
+                avoidFerries: true,
+                avoidHighways: false,
+                avoidTolls: false
             };
+
+            // Add wheelchair accessibility if enabled
+            if (currentMode === 'accessibility' && accessibilityOptions.wheelchair) {
+                request.accessibilityOptions = {
+                    wheelchairAccessible: true
+                };
+            }
 
             directionsService.route(request, (result, status) => {
                 if (status === 'OK') {
+                    // Apply different styling for accessibility routes
+                    if (currentMode === 'accessibility') {
+                        directionsRenderer.setOptions({
+                            polylineOptions: {
+                                strokeColor: '#2ECC71',
+                                strokeOpacity: 0.8,
+                                strokeWeight: 6
+                            }
+                        });
+                    } else {
+                        directionsRenderer.setOptions({
+                            polylineOptions: {
+                                strokeColor: '#FF0000',
+                                strokeOpacity: 0.8,
+                                strokeWeight: 5
+                            }
+                        });
+                    }
+                    
                     directionsRenderer.setDirections(result);
                     
                     // Display distance and instructions
