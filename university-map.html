@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive University of Hull Map</title>
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 5;
+            background: rgba(255,255,255,0.98);
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.2);
+            width: 280px;
+            font-family: Arial, sans-serif;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        #search-container {
+            margin-bottom: 15px;
+        }
+        #search-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #search-results {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            display: none;
+        }
+        #directions-panel {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            display: none;
+        }
+        .category {
+            color: #00509E;
+            font-weight: bold;
+            margin: 15px 0 5px 0;
+            font-size: 0.9em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 6px 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #00509E;
+            color: white;
+        }
+        #logo {
+            text-align: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #00509E;
+            font-size: 1.1em;
+        }
+        #recenter-btn, #reset-directions, #show-location {
+            background: #00509E;
+            color: white;
+            text-align: center;
+        }
+        .search-result {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .search-result:hover {
+            background: #f0f7ff;
+        }
+        .mode-selector {
+            margin: 10px 0;
+        }
+        .mode-btn {
+            display: inline-block;
+            width: auto;
+            padding: 5px 10px;
+            margin-right: 5px;
+        }
+        #debug-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="controls">
+        <div id="logo">UNIVERSITY OF HULL</div>
+        
+        <!-- Search Box -->
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Search buildings...">
+            <div id="search-results"></div>
+        </div>
+        
+        <button id="recenter-btn">Reset View</button>
+        <button id="show-location">Show My Location</button>
+        <button id="reset-directions" style="display:none;">Clear Directions</button>
+        
+        <!-- Directions Panel -->
+        <div id="directions-panel">
+            <div class="mode-selector">
+                <button class="mode-btn" data-mode="WALKING">Walk</button>
+                <button class="mode-btn" data-mode="DRIVING">Drive</button>
+            </div>
+            <div id="directions-instructions"></div>
+            <div id="distance-info"></div>
+        </div>
+        
+        <!-- Building Categories -->
+        <div class="category">ACADEMIC BUILDINGS</div>
+        <button class="goto-btn" data-lat="53.771112" data-lng="-0.369320">Brynmor Jones Library</button>
+        <button class="goto-btn" data-lat="53.770998" data-lng="-0.370300">Allam Medical Building</button>
+        <button class="goto-btn" data-lat="53.770821" data-lng="-0.366477">Wilberforce Building</button>
+        <button class="goto-btn" data-lat="53.770330" data-lng="-0.368166">Larkin Building</button>
+        <button class="goto-btn" data-lat="53.771509" data-lng="-0.368860">Robert Blackburn</button>
+        
+        <div class="category">STUDENT LIFE</div>
+        <button class="goto-btn" data-lat="53.772666" data-lng="-0.365194">Masjid Hull University</button>
+        <button class="goto-btn" data-lat="53.771961" data-lng="-0.366254">Student Union (Asylum)</button>
+        <button class="goto-btn" data-lat="53.771715" data-lng="-0.366143">Wetherspoons (Sanctuary)</button>
+        
+        <div class="category">ACCOMMODATIONS</div>
+        <button class="goto-btn" data-lat="53.772658" data-lng="-0.366401">The Courtyard</button>
+        <button class="goto-btn" data-lat="53.771534" data-lng="-0.372415">Westfield Court</button>
+        <button class="goto-btn" data-lat="53.770757" data-lng="-0.364416">Taylor Court</button>
+        
+        <div class="category">SPORTS</div>
+        <button class="goto-btn" data-lat="53.774024" data-lng="-0.368526">Allam Sports Centre</button>
+    </div>
+
+    <div id="debug-info"></div>
+
+    <script>
+        // Boundary coordinates (invisible crop)
+        const BOUNDARY_COORDS = [
+            { lat: 53.776447, lng: -0.371282 }, // NW
+            { lat: 53.772511, lng: -0.374911 }, // NE
+            { lat: 53.769470, lng: -0.371443 }, // SE
+            { lat: 53.769553, lng: -0.366529 }, // SW
+            { lat: 53.770662, lng: -0.362849 }, // Additional
+            { lat: 53.776204, lng: -0.365295 }  // Additional
+        ];
+
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let userLocationMarker;
+        let selectedBuilding = null;
+
+        // All buildings data
+        const BUILDINGS = [
+            // Academic (Blue)
+            { lat: 53.771112, lng: -0.369320, title: "Brynmor Jones Library", color: "#00509E", category: "Academic" },
+            { lat: 53.770998, lng: -0.370300, title: "Allam Medical Building", color: "#00509E", category: "Academic" },
+            { lat: 53.770821, lng: -0.366477, title: "Wilberforce Building", color: "#00509E", category: "Academic" },
+            { lat: 53.770330, lng: -0.368166, title: "Larkin Building", color: "#00509E", category: "Academic" },
+            { lat: 53.771509, lng: -0.368860, title: "Robert Blackburn Building", color: "#00509E", category: "Academic" },
+            
+            // Masjid (Green)
+            { lat: 53.772666, lng: -0.365194, title: "Masjid Hull University", color: "#2ECC71", category: "Student Life" },
+            
+            // Student Life (Gold)
+            { lat: 53.771961, lng: -0.366254, title: "Student Union (Asylum)", color: "#F1C40F", category: "Student Life" },
+            { lat: 53.771715, lng: -0.366143, title: "Wetherspoons (Sanctuary)", color: "#F1C40F", category: "Student Life" },
+            
+            // Accommodations (Red)
+            { lat: 53.772658, lng: -0.366401, title: "The Courtyard", color: "#E74C3C", category: "Accommodations" },
+            { lat: 53.771534, lng: -0.372415, title: "Westfield Court", color: "#E74C3C", category: "Accommodations" },
+            { lat: 53.770757, lng: -0.364416, title: "Taylor Court", color: "#E74C3C", category: "Accommodations" },
+            
+            // Sports (Orange)
+            { lat: 53.774024, lng: -0.368526, title: "Allam Sports Centre", color: "#E67E22", category: "Sports" }
+        ];
+
+        function initMap() {
+            // Initialize map with strict boundaries
+            const bounds = new google.maps.LatLngBounds();
+            BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+
+            map = new google.maps.Map(document.getElementById("map"), {
+                mapId: "841c37f9fffb3a1c",
+                disableDefaultUI: true,
+                gestureHandling: "greedy",
+                restriction: {
+                    latLngBounds: bounds,
+                    strictBounds: true
+                },
+                styles: [
+                    { featureType: "poi", stylers: [{ visibility: "off" }] },
+                    { featureType: "transit", stylers: [{ visibility: "off" }] },
+                    { featureType: "landscape", stylers: [{ color: "#f5f5f5" }] }
+                ]
+            });
+
+            // Set initial view to fit boundary
+            map.fitBounds(bounds);
+
+            // Add invisible cropping polygon
+            new google.maps.Polygon({
+                paths: BOUNDARY_COORDS,
+                strokeOpacity: 0,
+                fillOpacity: 0,
+                map: map
+            });
+
+            // Initialize directions services
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                map: map,
+                suppressMarkers: true,
+                preserveViewport: true
+            });
+
+            // Add markers with optimized rendering
+            BUILDINGS.forEach(location => {
+                new google.maps.Marker({
+                    position: { lat: location.lat, lng: location.lng },
+                    map: map,
+                    title: location.title,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: location.color,
+                        fillOpacity: 0.9,
+                        strokeColor: "#FFFFFF",
+                        strokeWeight: 2,
+                        scale: 8,
+                        optimized: true
+                    },
+                    zIndex: google.maps.Marker.MAX_ZINDEX + 1
+                });
+            });
+
+            // Search functionality
+            const searchInput = document.getElementById('search-input');
+            const searchResults = document.getElementById('search-results');
+            
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.toLowerCase();
+                if (query.length < 2) {
+                    searchResults.style.display = 'none';
+                    return;
+                }
+                
+                const results = BUILDINGS.filter(building => 
+                    building.title.toLowerCase().includes(query)
+                );
+                
+                displaySearchResults(results);
+            });
+
+            // Navigation buttons with boundary checks
+            document.querySelectorAll('.goto-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const lat = parseFloat(btn.dataset.lat);
+                    const lng = parseFloat(btn.dataset.lng);
+                    const target = new google.maps.LatLng(lat, lng);
+                    
+                    if (bounds.contains(target)) {
+                        centerAndPulse(target, btn.textContent);
+                    } else {
+                        alert("This location is outside the campus boundary.");
+                    }
+                });
+            });
+
+            // Recenter button
+            document.getElementById("recenter-btn").addEventListener("click", () => {
+                resetMap();
+            });
+
+            // Show location button
+            document.getElementById("show-location").addEventListener("click", () => {
+                if (userLocationMarker) {
+                    map.panTo(userLocationMarker.getPosition());
+                    map.setZoom(18);
+                    updateDebugInfo("Showing your location at: " + 
+                        userLocationMarker.getPosition().lat().toFixed(6) + ", " + 
+                        userLocationMarker.getPosition().lng().toFixed(6));
+                } else {
+                    alert("No location available or you're outside campus bounds");
+                    updateDebugInfo("No location available");
+                    getUserLocation(true); // Force try again
+                }
+            });
+
+            // Reset directions button
+            document.getElementById("reset-directions").addEventListener("click", () => {
+                resetDirections();
+            });
+
+            // Mode selector buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (selectedBuilding) {
+                        calculateAndDisplayRoute(selectedBuilding, btn.dataset.mode);
+                    }
+                });
+            });
+
+            // Initial location attempt
+            getUserLocation(false);
+        }
+
+        function getUserLocation(forceShow) {
+            if (navigator.geolocation) {
+                updateDebugInfo("Attempting to get location...");
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        updateDebugInfo(
+                            `Location found: ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}\n` +
+                            `Accuracy: ${position.coords.accuracy} meters`
+                        );
+                        
+                        const bounds = new google.maps.LatLngBounds();
+                        BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+                        
+                        const withinBounds = bounds.contains(userLocation);
+                        updateDebugInfo(
+                            `Within campus bounds: ${withinBounds}\n` +
+                            `Force show: ${forceShow}`
+                        );
+                        
+                        if (withinBounds || forceShow) {
+                            if (userLocationMarker) {
+                                userLocationMarker.setMap(null);
+                            }
+                            
+                            userLocationMarker = new google.maps.Marker({
+                                position: userLocation,
+                                map: map,
+                                title: "Your Location",
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    fillColor: "#4285F4",
+                                    fillOpacity: 0.9,
+                                    strokeColor: "#FFFFFF",
+                                    strokeWeight: 2,
+                                    scale: 8
+                                },
+                                zIndex: google.maps.Marker.MAX_ZINDEX + 3
+                            });
+                            
+                            if (forceShow) {
+                                map.panTo(userLocation);
+                                map.setZoom(18);
+                            }
+                        } else {
+                            updateDebugInfo("Location is outside campus bounds");
+                        }
+                    },
+                    (error) => {
+                        let errorMessage = "Geolocation error: ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage += "User denied the request for geolocation.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage += "Location information is unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage += "The request to get user location timed out.";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                errorMessage += "An unknown error occurred.";
+                                break;
+                        }
+                        updateDebugInfo(errorMessage);
+                        console.error(errorMessage);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                updateDebugInfo("Geolocation is not supported by this browser");
+            }
+        }
+
+        function updateDebugInfo(message) {
+            const debugElement = document.getElementById('debug-info');
+            debugElement.textContent = message;
+            debugElement.style.display = 'block';
+            setTimeout(() => {
+                debugElement.style.display = 'none';
+            }, 5000);
+        }
+
+        function displaySearchResults(results) {
+            const searchResults = document.getElementById('search-results');
+            searchResults.innerHTML = '';
+            
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div class="search-result">No buildings found</div>';
+            } else {
+                results.forEach(building => {
+                    const resultElement = document.createElement('div');
+                    resultElement.className = 'search-result';
+                    resultElement.textContent = building.title;
+                    resultElement.addEventListener('click', () => {
+                        const target = new google.maps.LatLng(building.lat, building.lng);
+                        centerAndPulse(target, building.title);
+                        searchResults.style.display = 'none';
+                        document.getElementById('search-input').value = building.title;
+                        selectedBuilding = building;
+                        showDirectionsPanel();
+                    });
+                    searchResults.appendChild(resultElement);
+                });
+            }
+            
+            searchResults.style.display = 'block';
+        }
+
+        function centerAndPulse(position, title) {
+            map.panTo(position);
+            map.setZoom(18);
+            
+            // Pulse animation
+            const marker = new google.maps.Marker({
+                position: position,
+                map: map,
+                animation: google.maps.Animation.BOUNCE,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: "#FFD700",
+                    fillOpacity: 0.8,
+                    strokeColor: "#FFFFFF",
+                    strokeWeight: 3,
+                    scale: 10,
+                    optimized: true
+                },
+                zIndex: google.maps.Marker.MAX_ZINDEX + 2
+            });
+            
+            setTimeout(() => marker.setMap(null), 1400);
+        }
+
+        function showDirectionsPanel() {
+            document.getElementById('directions-panel').style.display = 'block';
+            document.getElementById('reset-directions').style.display = 'block';
+            
+            if (userLocationMarker) {
+                calculateAndDisplayRoute(selectedBuilding, 'WALKING');
+            } else {
+                document.getElementById('directions-instructions').innerHTML = 
+                    '<p>Enable location services to get directions from your current position.</p>';
+            }
+        }
+
+        function calculateAndDisplayRoute(destination, mode) {
+            if (!userLocationMarker) return;
+
+            const request = {
+                origin: userLocationMarker.getPosition(),
+                destination: new google.maps.LatLng(destination.lat, destination.lng),
+                travelMode: google.maps.TravelMode[mode]
+            };
+
+            directionsService.route(request, (result, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(result);
+                    
+                    // Display distance and instructions
+                    const route = result.routes[0].legs[0];
+                    document.getElementById('distance-info').innerHTML = 
+                        `<p><strong>Distance:</strong> ${route.distance.text}<br>
+                         <strong>Duration:</strong> ${route.duration.text}</p>`;
+                    
+                    let instructions = '<ol>';
+                    route.steps.forEach(step => {
+                        instructions += `<li>${step.instructions}</li>`;
+                    });
+                    instructions += '</ol>';
+                    document.getElementById('directions-instructions').innerHTML = instructions;
+                }
+            });
+        }
+
+        function resetDirections() {
+            directionsRenderer.setMap(null);
+            document.getElementById('directions-panel').style.display = 'none';
+            document.getElementById('reset-directions').style.display = 'none';
+            selectedBuilding = null;
+        }
+
+        function resetMap() {
+            const bounds = new google.maps.LatLngBounds();
+            BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+            map.fitBounds(bounds);
+            resetDirections();
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA0eo_kH5S8DCX53vLaILohfuo0-nkwqQc&callback=initMap&libraries=places" async defer></script>
+</body>
+</html>
