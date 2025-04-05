@@ -118,77 +118,10 @@
             background-color: rgba(0, 80, 158, 0.7);
             border-radius: 3px;
         }
-        /* New styles for mode panels */
-        .mode-toggle {
-            background: #00509E;
-            color: white;
-            text-align: center;
-            margin: 5px 0;
-        }
-        .mode-panel {
-            padding: 10px;
-            background: #f0f7ff;
-            border-radius: 6px;
-            margin: 10px 0;
-        }
-        .mode-panel label {
-            display: block;
-            margin: 8px 0;
-            cursor: pointer;
-        }
-        #emergency-call {
-            background: #ff0000;
-            color: white;
-            font-weight: bold;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        /* Accessibility route styling */
-        .accessibility-route {
-            stroke-color: #2ECC71;
-            stroke-width: 6;
-            stroke-opacity: 0.8;
-        }
-        /* Event marker styling */
-        .event-marker {
-            fillColor: "#9B59B6";
-            fillOpacity: 0.9;
-            strokeColor: "#FFFFFF";
-            strokeWeight: 2;
-            scale: 8;
-        }
-        /* Parking marker styling */
-        .parking-marker {
-            fillColor: "#34495E";
-            fillOpacity: 0.9;
-            strokeColor: "#FFFFFF";
-            strokeWeight: 2;
-            scale: 8;
-        }
-        /* Alert banner */
-        #alert-banner {
-            position: absolute;
-            top: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255,204,0,0.9);
-            padding: 10px 20px;
-            border-radius: 5px;
-            z-index: 10;
-            display: none;
-            max-width: 80%;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="alert-banner"></div>
     <div id="controls">
         <div id="logo">UNIVERSITY OF HULL</div>
         
@@ -211,57 +144,6 @@
             </div>
             <div id="directions-instructions"></div>
             <div id="distance-info"></div>
-        </div>
-        
-        <!-- New Mode Selection -->
-        <div class="category">NAVIGATION MODES</div>
-        <button id="study-mode-btn" class="mode-toggle">Study Mode</button>
-        <button id="accessibility-mode-btn" class="mode-toggle">Accessibility</button>
-        <button id="emergency-mode-btn" class="mode-toggle">Emergency</button>
-        <button id="events-mode-btn" class="mode-toggle">Events</button>
-        <button id="parking-mode-btn" class="mode-toggle">Parking</button>
-
-        <!-- Study Mode Panel -->
-        <div id="study-panel" class="mode-panel" style="display:none;">
-            <input type="text" id="room-search" placeholder="Enter room code (e.g. LB101)">
-            <div id="room-results"></div>
-        </div>
-
-        <!-- Accessibility Options Panel -->
-        <div id="accessibility-panel" class="mode-panel" style="display:none;">
-            <label>
-                <input type="checkbox" id="wheelchair-route" checked> 
-                Wheelchair accessible routes only
-            </label>
-            <label>
-                <input type="checkbox" id="avoid-stairs" checked> 
-                Avoid stairs
-            </label>
-        </div>
-
-        <!-- Emergency Panel -->
-        <div id="emergency-panel" class="mode-panel" style="display:none;">
-            <button id="find-security">Find Security Office</button>
-            <button id="find-medical">Find Medical Help</button>
-            <button id="emergency-call">Call Campus Security</button>
-        </div>
-
-        <!-- Events Panel -->
-        <div id="events-panel" class="mode-panel" style="display:none;">
-            <div id="events-list"></div>
-            <label>
-                <input type="checkbox" id="show-future-events" checked>
-                Show upcoming events
-            </label>
-        </div>
-
-        <!-- Parking Panel -->
-        <div id="parking-panel" class="mode-panel" style="display:none;">
-            <div id="parking-info">Loading parking availability...</div>
-            <label>
-                <input type="checkbox" id="accessible-parking" checked>
-                Show accessible parking only
-            </label>
         </div>
         
         <!-- Building Categories -->
@@ -305,101 +187,30 @@
         let userLocationMarker;
         let selectedBuilding = null;
         let isSatelliteView = false;
-        let currentMode = null;
-        let accessibilityOptions = {
-            wheelchair: true,
-            avoidStairs: true
-        };
-        let eventMarkers = [];
-        let parkingMarkers = [];
-        let teacherAlerts = [];
 
-        // Enhanced buildings data
+        // All buildings data
         const BUILDINGS = [
-            {
-                id: "LIB-01",
-                title: "Brynmor Jones Library",
-                lat: 53.771112,
-                lng: -0.369320,
-                color: "#00509E",
-                category: "Academic",
-                accessibility: {
-                    wheelchair: true,
-                    elevator: true,
-                    accessibleRestrooms: true
-                },
-                rooms: ["LB101", "LB202", "LB305"],
-                emergency: {
-                    isFirstAidCenter: false,
-                    hasEmergencyPhone: true
-                }
-            },
-            // ... (rest of your buildings data)
-        ];
-
-        // Emergency facilities data
-        const EMERGENCY_FACILITIES = [
-            {
-                id: "SEC-01",
-                title: "Security Office",
-                lat: 53.771500,
-                lng: -0.368500,
-                type: "security"
-            },
-            {
-                id: "FIR-01",
-                title: "First Aid Station",
-                lat: 53.770998,
-                lng: -0.370300,
-                type: "medical"
-            }
-        ];
-
-        // Events data
-        const EVENTS = [
-            {
-                id: "EVT-001",
-                title: "Freshers' Welcome",
-                buildingId: "LIB-01",
-                start: "2023-09-20T10:00:00",
-                end: "2023-09-20T16:00:00",
-                description: "Welcome event for new students",
-                category: "social"
-            },
-            {
-                id: "EVT-002",
-                title: "Computer Science Lecture",
-                buildingId: "WIL-01",
-                start: "2023-09-21T09:00:00",
-                end: "2023-09-21T11:00:00",
-                description: "Intro to Programming",
-                category: "academic"
-            }
-        ];
-
-        // Parking data
-        const PARKING_LOTS = [
-            {
-                id: "PARK-01",
-                title: "Main Campus Parking",
-                lat: 53.772000,
-                lng: -0.370000,
-                totalSpaces: 120,
-                availableSpaces: 45,
-                accessibleSpaces: 8,
-                accessibleAvailable: 3
-            }
-        ];
-
-        // Teacher alerts (would normally come from a server)
-        const TEACHER_ALERTS = [
-            {
-                id: "ALERT-001",
-                buildingId: "WIL-01",
-                room: "WB101",
-                message: "CS101 moved to Larkin Building Room LK205 today",
-                expires: "2023-09-21T17:00:00"
-            }
+            // Academic (Blue)
+            { lat: 53.771112, lng: -0.369320, title: "Brynmor Jones Library", color: "#00509E", category: "Academic" },
+            { lat: 53.770998, lng: -0.370300, title: "Allam Medical Building", color: "#00509E", category: "Academic" },
+            { lat: 53.770821, lng: -0.366477, title: "Wilberforce Building", color: "#00509E", category: "Academic" },
+            { lat: 53.770330, lng: -0.368166, title: "Larkin Building", color: "#00509E", category: "Academic" },
+            { lat: 53.771509, lng: -0.368860, title: "Robert Blackburn Building", color: "#00509E", category: "Academic" },
+            
+            // Masjid (Green)
+            { lat: 53.772666, lng: -0.365194, title: "Masjid Hull University", color: "#2ECC71", category: "Student Life" },
+            
+            // Student Life (Gold)
+            { lat: 53.771961, lng: -0.366254, title: "Student Union (Asylum)", color: "#F1C40F", category: "Student Life" },
+            { lat: 53.771715, lng: -0.366143, title: "Wetherspoons (Sanctuary)", color: "#F1C40F", category: "Student Life" },
+            
+            // Accommodations (Red)
+            { lat: 53.772658, lng: -0.366401, title: "The Courtyard", color: "#E74C3C", category: "Accommodations" },
+            { lat: 53.771534, lng: -0.372415, title: "Westfield Court", color: "#E74C3C", category: "Accommodations" },
+            { lat: 53.770757, lng: -0.364416, title: "Taylor Court", color: "#E74C3C", category: "Accommodations" },
+            
+            // Sports (Orange)
+            { lat: 53.774024, lng: -0.368526, title: "Allam Sports Centre", color: "#E67E22", category: "Sports" }
         ];
 
         function initMap() {
@@ -410,7 +221,7 @@
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 53.771, lng: -0.368 },
                 zoom: 17,
-                mapTypeId: 'hybrid',
+                mapTypeId: 'hybrid', // Start with satellite+labels view
                 disableDefaultUI: true,
                 gestureHandling: "greedy",
                 restriction: {
@@ -440,7 +251,7 @@
                 }
             });
 
-            // Add building markers
+            // Add markers with optimized rendering
             BUILDINGS.forEach(location => {
                 const marker = new google.maps.Marker({
                     position: { lat: location.lat, lng: location.lng },
@@ -471,423 +282,283 @@
                 marker.addListener("mouseout", () => {
                     label.close();
                 });
-
-                marker.addListener("click", () => {
-                    showBuildingInfo(location);
-                });
             });
 
-            // Add emergency facility markers
-            EMERGENCY_FACILITIES.forEach(facility => {
-                new google.maps.Marker({
-                    position: { lat: facility.lat, lng: facility.lng },
-                    map: map,
-                    title: facility.title,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: "#FF0000",
-                        fillOpacity: 0.9,
-                        strokeColor: "#FFFFFF",
-                        strokeWeight: 2,
-                        scale: 8
-                    },
-                    zIndex: google.maps.Marker.MAX_ZINDEX + 2
-                });
-            });
-
-            // Initialize event markers (initially hidden)
-            initializeEvents();
+            // Search functionality
+            const searchInput = document.getElementById('search-input');
+            const searchResults = document.getElementById('search-results');
             
-            // Initialize parking markers (initially hidden)
-            initializeParking();
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.toLowerCase();
+                if (query.length < 2) {
+                    searchResults.style.display = 'none';
+                    return;
+                }
+                
+                const results = BUILDINGS.filter(building => 
+                    building.title.toLowerCase().includes(query)
+                );
+                
+                displaySearchResults(results);
+            });
 
-            // Check for teacher alerts
-            checkTeacherAlerts();
+            // Navigation buttons with boundary checks
+            document.querySelectorAll('.goto-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const lat = parseFloat(btn.dataset.lat);
+                    const lng = parseFloat(btn.dataset.lng);
+                    const target = new google.maps.LatLng(lat, lng);
+                    
+                    if (bounds.contains(target)) {
+                        centerAndPulse(target, btn.textContent);
+                    } else {
+                        alert("This location is outside the campus boundary.");
+                    }
+                });
+            });
 
-            // Set up event listeners
-            setupEventListeners();
+            // Recenter button
+            document.getElementById("recenter-btn").addEventListener("click", () => {
+                resetMap();
+            });
+
+            // Show location button
+            document.getElementById("show-location").addEventListener("click", () => {
+                if (userLocationMarker) {
+                    map.panTo(userLocationMarker.getPosition());
+                    map.setZoom(18);
+                    updateDebugInfo("Showing your location at: " + 
+                        userLocationMarker.getPosition().lat().toFixed(6) + ", " + 
+                        userLocationMarker.getPosition().lng().toFixed(6));
+                } else {
+                    alert("No location available or you're outside campus bounds");
+                    updateDebugInfo("No location available");
+                    getUserLocation(true); // Force try again
+                }
+            });
+
+            // Toggle satellite view button
+            document.getElementById("toggle-satellite").addEventListener("click", () => {
+                isSatelliteView = !isSatelliteView;
+                map.setMapTypeId(isSatelliteView ? 'hybrid' : 'roadmap');
+                document.getElementById("toggle-satellite").textContent = 
+                    isSatelliteView ? "Show Map View" : "Show Satellite View";
+            });
+
+            // Reset directions button
+            document.getElementById("reset-directions").addEventListener("click", () => {
+                resetDirections();
+            });
+
+            // Mode selector buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (selectedBuilding) {
+                        calculateAndDisplayRoute(selectedBuilding, btn.dataset.mode);
+                    }
+                });
+            });
 
             // Initial location attempt
             getUserLocation(false);
         }
 
-        function setupEventListeners() {
-            // Existing event listeners...
-            document.getElementById('study-mode-btn').addEventListener('click', toggleStudyMode);
-            document.getElementById('accessibility-mode-btn').addEventListener('click', toggleAccessibilityMode);
-            document.getElementById('emergency-mode-btn').addEventListener('click', toggleEmergencyMode);
-            document.getElementById('events-mode-btn').addEventListener('click', toggleEventsMode);
-            document.getElementById('parking-mode-btn').addEventListener('click', toggleParkingMode);
-            
-            document.getElementById('wheelchair-route').addEventListener('change', updateAccessibilityOptions);
-            document.getElementById('avoid-stairs').addEventListener('change', updateAccessibilityOptions);
-            document.getElementById('find-security').addEventListener('click', findSecurity);
-            document.getElementById('find-medical').addEventListener('click', findMedical);
-            document.getElementById('emergency-call').addEventListener('click', callSecurity);
-            document.getElementById('room-search').addEventListener('input', searchRooms);
-            document.getElementById('show-future-events').addEventListener('change', updateEventsDisplay);
-            document.getElementById('accessible-parking').addEventListener('change', updateParkingDisplay);
-        }
-
-        function initializeEvents() {
-            EVENTS.forEach(event => {
-                const building = BUILDINGS.find(b => b.id === event.buildingId);
-                if (building) {
-                    const marker = new google.maps.Marker({
-                        position: { lat: building.lat, lng: building.lng },
-                        map: null, // Initially not shown
-                        title: event.title,
-                        icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            fillColor: "#9B59B6",
-                            fillOpacity: 0.9,
-                            strokeColor: "#FFFFFF",
-                            strokeWeight: 2,
-                            scale: 8
-                        },
-                        zIndex: google.maps.Marker.MAX_ZINDEX + 3
-                    });
-                    
-                    const infoWindow = new google.maps.InfoWindow({
-                        content: `
-                            <div style="max-width:250px">
-                                <h3 style="margin:0 0 5px 0;color:#9B59B6">${event.title}</h3>
-                                <p><strong>Location:</strong> ${building.title}</p>
-                                <p><strong>Time:</strong> ${formatEventTime(event.start, event.end)}</p>
-                                <p>${event.description}</p>
-                            </div>
-                        `
-                    });
-                    
-                    marker.addListener("click", () => {
-                        infoWindow.open(map, marker);
-                    });
-                    
-                    eventMarkers.push({
-                        marker: marker,
-                        event: event
-                    });
-                }
-            });
-            updateEventsList();
-        }
-
-        function initializeParking() {
-            PARKING_LOTS.forEach(lot => {
-                const marker = new google.maps.Marker({
-                    position: { lat: lot.lat, lng: lot.lng },
-                    map: null, // Initially not shown
-                    title: lot.title,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: "#34495E",
-                        fillOpacity: 0.9,
-                        strokeColor: "#FFFFFF",
-                        strokeWeight: 2,
-                        scale: 8
-                    },
-                    zIndex: google.maps.Marker.MAX_ZINDEX + 2
-                });
+        function getUserLocation(forceShow) {
+            if (navigator.geolocation) {
+                updateDebugInfo("Attempting to get location...");
                 
-                const infoWindow = new google.maps.InfoWindow({
-                    content: `
-                        <div style="max-width:250px">
-                            <h3 style="margin:0 0 5px 0;color:#34495E">${lot.title}</h3>
-                            <p><strong>Available spaces:</strong> ${lot.availableSpaces}/${lot.totalSpaces}</p>
-                            <p><strong>Accessible spaces:</strong> ${lot.accessibleAvailable}/${lot.accessibleSpaces}</p>
-                        </div>
-                    `
-                });
-                
-                marker.addListener("click", () => {
-                    infoWindow.open(map, marker);
-                });
-                
-                parkingMarkers.push({
-                    marker: marker,
-                    lot: lot
-                });
-            });
-            updateParkingInfo();
-        }
-
-        function checkTeacherAlerts() {
-            const now = new Date();
-            teacherAlerts = TEACHER_ALERTS.filter(alert => new Date(alert.expires) > now);
-            
-            if (teacherAlerts.length > 0) {
-                showAlertBanner(teacherAlerts[0].message);
-                
-                // Highlight affected buildings
-                teacherAlerts.forEach(alert => {
-                    const building = BUILDINGS.find(b => b.id === alert.buildingId);
-                    if (building) {
-                        // Add pulsing alert marker
-                        const alertMarker = new google.maps.Marker({
-                            position: { lat: building.lat, lng: building.lng },
-                            map: map,
-                            title: "Class Change Alert",
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                fillColor: "#FFA500",
-                                fillOpacity: 0.8,
-                                strokeColor: "#FFFFFF",
-                                strokeWeight: 2,
-                                scale: 10
-                            },
-                            zIndex: google.maps.Marker.MAX_ZINDEX + 4,
-                            animation: google.maps.Animation.BOUNCE
-                        });
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
                         
-                        // Remove after 10 seconds
-                        setTimeout(() => {
-                            alertMarker.setMap(null);
-                        }, 10000);
-                    }
-                });
-            }
-        }
-
-        function showAlertBanner(message) {
-            const banner = document.getElementById('alert-banner');
-            banner.textContent = message;
-            banner.style.display = 'block';
-            
-            // Hide after 15 seconds
-            setTimeout(() => {
-                banner.style.display = 'none';
-            }, 15000);
-        }
-
-        function toggleStudyMode() {
-            if (currentMode === 'study') {
-                currentMode = null;
-                document.getElementById('study-panel').style.display = 'none';
-                document.getElementById('study-mode-btn').style.backgroundColor = '#00509E';
-            } else {
-                currentMode = 'study';
-                document.getElementById('study-panel').style.display = 'block';
-                document.getElementById('study-mode-btn').style.backgroundColor = '#003366';
-                // Hide other panels
-                hideAllPanelsExcept('study-panel');
-                // Reset other mode buttons
-                resetModeButtonsExcept('study-mode-btn');
-            }
-        }
-
-        function toggleAccessibilityMode() {
-            if (currentMode === 'accessibility') {
-                currentMode = null;
-                document.getElementById('accessibility-panel').style.display = 'none';
-                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#00509E';
-            } else {
-                currentMode = 'accessibility';
-                document.getElementById('accessibility-panel').style.display = 'block';
-                document.getElementById('accessibility-mode-btn').style.backgroundColor = '#003366';
-                // Hide other panels
-                hideAllPanelsExcept('accessibility-panel');
-                // Reset other mode buttons
-                resetModeButtonsExcept('accessibility-mode-btn');
-            }
-        }
-
-        function toggleEmergencyMode() {
-            if (currentMode === 'emergency') {
-                currentMode = null;
-                document.getElementById('emergency-panel').style.display = 'none';
-                document.getElementById('emergency-mode-btn').style.backgroundColor = '#00509E';
-            } else {
-                currentMode = 'emergency';
-                document.getElementById('emergency-panel').style.display = 'block';
-                document.getElementById('emergency-mode-btn').style.backgroundColor = '#003366';
-                // Hide other panels
-                hideAllPanelsExcept('emergency-panel');
-                // Reset other mode buttons
-                resetModeButtonsExcept('emergency-mode-btn');
-            }
-        }
-
-        function toggleEventsMode() {
-            if (currentMode === 'events') {
-                currentMode = null;
-                document.getElementById('events-panel').style.display = 'none';
-                document.getElementById('events-mode-btn').style.backgroundColor = '#00509E';
-                hideEventMarkers();
-            } else {
-                currentMode = 'events';
-                document.getElementById('events-panel').style.display = 'block';
-                document.getElementById('events-mode-btn').style.backgroundColor = '#003366';
-                // Hide other panels
-                hideAllPanelsExcept('events-panel');
-                // Reset other mode buttons
-                resetModeButtonsExcept('events-mode-btn');
-                showEventMarkers();
-            }
-        }
-
-        function toggleParkingMode() {
-            if (currentMode === 'parking') {
-                currentMode = null;
-                document.getElementById('parking-panel').style.display = 'none';
-                document.getElementById('parking-mode-btn').style.backgroundColor = '#00509E';
-                hideParkingMarkers();
-            } else {
-                currentMode = 'parking';
-                document.getElementById('parking-panel').style.display = 'block';
-                document.getElementById('parking-mode-btn').style.backgroundColor = '#003366';
-                // Hide other panels
-                hideAllPanelsExcept('parking-panel');
-                // Reset other mode buttons
-                resetModeButtonsExcept('parking-mode-btn');
-                showParkingMarkers();
-            }
-        }
-
-        function hideAllPanelsExcept(panelId) {
-            const panels = ['study-panel', 'accessibility-panel', 'emergency-panel', 'events-panel', 'parking-panel'];
-            panels.forEach(id => {
-                if (id !== panelId) {
-                    document.getElementById(id).style.display = 'none';
-                }
-            });
-        }
-
-        function resetModeButtonsExcept(buttonId) {
-            const buttons = ['study-mode-btn', 'accessibility-mode-btn', 'emergency-mode-btn', 'events-mode-btn', 'parking-mode-btn'];
-            buttons.forEach(id => {
-                if (id !== buttonId) {
-                    document.getElementById(id).style.backgroundColor = '#00509E';
-                }
-            });
-        }
-
-        function showEventMarkers() {
-            const showFuture = document.getElementById('show-future-events').checked;
-            const now = new Date();
-            
-            eventMarkers.forEach(eventMarker => {
-                const eventEnd = new Date(eventMarker.event.end);
-                if (showFuture || eventEnd > now) {
-                    eventMarker.marker.setMap(map);
-                } else {
-                    eventMarker.marker.setMap(null);
-                }
-            });
-        }
-
-        function hideEventMarkers() {
-            eventMarkers.forEach(eventMarker => {
-                eventMarker.marker.setMap(null);
-            });
-        }
-
-        function showParkingMarkers() {
-            const showAccessibleOnly = document.getElementById('accessible-parking').checked;
-            
-            parkingMarkers.forEach(parkingMarker => {
-                if (!showAccessibleOnly || parkingMarker.lot.accessibleAvailable > 0) {
-                    parkingMarker.marker.setMap(map);
-                } else {
-                    parkingMarker.marker.setMap(null);
-                }
-            });
-        }
-
-        function hideParkingMarkers() {
-            parkingMarkers.forEach(parkingMarker => {
-                parkingMarker.marker.setMap(null);
-            });
-        }
-
-        function updateEventsList() {
-            const eventsList = document.getElementById('events-list');
-            eventsList.innerHTML = '';
-            
-            const now = new Date();
-            const showFuture = document.getElementById('show-future-events').checked;
-            
-            eventMarkers
-                .filter(eventMarker => showFuture || new Date(eventMarker.event.end) > now)
-                .sort((a, b) => new Date(a.event.start) - new Date(b.event.start))
-                .forEach(eventMarker => {
-                    const event = eventMarker.event;
-                    const building = BUILDINGS.find(b => b.id === event.buildingId);
-                    
-                    const eventElement = document.createElement('div');
-                    eventElement.className = 'search-result';
-                    eventElement.innerHTML = `
-                        <strong>${event.title}</strong><br>
-                        <small>${formatEventTime(event.start, event.end)}</small><br>
-                        <small>${building ? building.title : ''}</small>
-                    `;
-                    
-                    eventElement.addEventListener('click', () => {
-                        if (building) {
-                            centerAndPulse(
-                                { lat: building.lat, lng: building.lng },
-                                `${event.title} at ${building.title}`
-                            );
+                        updateDebugInfo(
+                            `Location found: ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}\n` +
+                            `Accuracy: ${position.coords.accuracy} meters`
+                        );
+                        
+                        const bounds = new google.maps.LatLngBounds();
+                        BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+                        
+                        const withinBounds = bounds.contains(userLocation);
+                        updateDebugInfo(
+                            `Within campus bounds: ${withinBounds}\n` +
+                            `Force show: ${forceShow}`
+                        );
+                        
+                        if (withinBounds || forceShow) {
+                            if (userLocationMarker) {
+                                userLocationMarker.setMap(null);
+                            }
+                            
+                            userLocationMarker = new google.maps.Marker({
+                                position: userLocation,
+                                map: map,
+                                title: "Your Location",
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    fillColor: "#4285F4",
+                                    fillOpacity: 0.9,
+                                    strokeColor: "#FFFFFF",
+                                    strokeWeight: 2,
+                                    scale: 8
+                                },
+                                zIndex: google.maps.Marker.MAX_ZINDEX + 3
+                            });
+                            
+                            if (forceShow) {
+                                map.panTo(userLocation);
+                                map.setZoom(18);
+                            }
+                        } else {
+                            updateDebugInfo("Location is outside campus bounds");
                         }
-                    });
-                    
-                    eventsList.appendChild(eventElement);
-                });
+                    },
+                    (error) => {
+                        let errorMessage = "Geolocation error: ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage += "User denied the request for geolocation.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage += "Location information is unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage += "The request to get user location timed out.";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                errorMessage += "An unknown error occurred.";
+                                break;
+                        }
+                        updateDebugInfo(errorMessage);
+                        console.error(errorMessage);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                updateDebugInfo("Geolocation is not supported by this browser");
+            }
         }
 
-        function updateParkingInfo() {
-            const parkingInfo = document.getElementById('parking-info');
-            let available = 0;
-            let total = 0;
-            let accessibleAvailable = 0;
-            let accessibleTotal = 0;
+        function updateDebugInfo(message) {
+            const debugElement = document.getElementById('debug-info');
+            debugElement.textContent = message;
+            debugElement.style.display = 'block';
+            setTimeout(() => {
+                debugElement.style.display = 'none';
+            }, 5000);
+        }
+
+        function displaySearchResults(results) {
+            const searchResults = document.getElementById('search-results');
+            searchResults.innerHTML = '';
             
-            parkingMarkers.forEach(parkingMarker => {
-                available += parkingMarker.lot.availableSpaces;
-                total += parkingMarker.lot.totalSpaces;
-                accessibleAvailable += parkingMarker.lot.accessibleAvailable;
-                accessibleTotal += parkingMarker.lot.accessibleSpaces;
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div class="search-result">No buildings found</div>';
+            } else {
+                results.forEach(building => {
+                    const resultElement = document.createElement('div');
+                    resultElement.className = 'search-result';
+                    resultElement.textContent = building.title;
+                    resultElement.addEventListener('click', () => {
+                        const target = new google.maps.LatLng(building.lat, building.lng);
+                        centerAndPulse(target, building.title);
+                        searchResults.style.display = 'none';
+                        document.getElementById('search-input').value = building.title;
+                        selectedBuilding = building;
+                        showDirectionsPanel();
+                    });
+                    searchResults.appendChild(resultElement);
+                });
+            }
+            
+            searchResults.style.display = 'block';
+        }
+
+        function centerAndPulse(position, title) {
+            map.panTo(position);
+            map.setZoom(18);
+            
+            // Pulse animation
+            const marker = new google.maps.Marker({
+                position: position,
+                map: map,
+                animation: google.maps.Animation.BOUNCE,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: "#FFD700",
+                    fillOpacity: 0.8,
+                    strokeColor: "#FFFFFF",
+                    strokeWeight: 3,
+                    scale: 10,
+                    optimized: true
+                },
+                zIndex: google.maps.Marker.MAX_ZINDEX + 2
             });
             
-            parkingInfo.innerHTML = `
-                <p><strong>Total available:</strong> ${available}/${total} spaces</p>
-                <p><strong>Accessible spaces:</strong> ${accessibleAvailable}/${accessibleTotal}</p>
-            `;
+            setTimeout(() => marker.setMap(null), 1400);
         }
 
-        function updateEventsDisplay() {
-            if (currentMode === 'events') {
-                showEventMarkers();
-                updateEventsList();
-            }
-        }
-
-        function updateParkingDisplay() {
-            if (currentMode === 'parking') {
-                showParkingMarkers();
-            }
-        }
-
-        function formatEventTime(start, end) {
-            const startDate = new Date(start);
-            const endDate = new Date(end);
+        function showDirectionsPanel() {
+            document.getElementById('directions-panel').style.display = 'block';
+            document.getElementById('reset-directions').style.display = 'block';
             
-            // Format as "Day, HH:MM - HH:MM"
-            const options = { 
-                weekday: 'short', 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: false
+            if (userLocationMarker) {
+                calculateAndDisplayRoute(selectedBuilding, 'WALKING');
+            } else {
+                document.getElementById('directions-instructions').innerHTML = 
+                    '<p>Enable location services to get directions from your current position.</p>';
+            }
+        }
+
+        function calculateAndDisplayRoute(destination, mode) {
+            if (!userLocationMarker) return;
+
+            const request = {
+                origin: userLocationMarker.getPosition(),
+                destination: new google.maps.LatLng(destination.lat, destination.lng),
+                travelMode: google.maps.TravelMode[mode]
             };
-            
-            const startStr = startDate.toLocaleTimeString('en-GB', options);
-            const endStr = endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-            
-            return `${startStr} - ${endStr}`;
+
+            directionsService.route(request, (result, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(result);
+                    
+                    // Display distance and instructions
+                    const route = result.routes[0].legs[0];
+                    document.getElementById('distance-info').innerHTML = 
+                        `<p><strong>Distance:</strong> ${route.distance.text}<br>
+                         <strong>Duration:</strong> ${route.duration.text}</p>`;
+                    
+                    let instructions = '<ol>';
+                    route.steps.forEach(step => {
+                        instructions += `<li>${step.instructions}</li>`;
+                    });
+                    instructions += '</ol>';
+                    document.getElementById('directions-instructions').innerHTML = instructions;
+                }
+            });
         }
 
-        // ... (keep all your existing functions like getUserLocation, calculateAndDisplayRoute, etc.)
-        // Make sure to include all the functions from your original code that I haven't shown here
+        function resetDirections() {
+            directionsRenderer.setMap(null);
+            document.getElementById('directions-panel').style.display = 'none';
+            document.getElementById('reset-directions').style.display = 'none';
+            selectedBuilding = null;
+        }
 
+        function resetMap() {
+            const bounds = new google.maps.LatLngBounds();
+            BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+            map.fitBounds(bounds);
+            resetDirections();
+        }
     </script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA0eo_kH5S8DCX53vLaILohfuo0-nkwqQc&callback=initMap&libraries=places" async defer></script>
 </body>
