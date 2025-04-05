@@ -76,7 +76,7 @@
             color: #00509E;
             font-size: 1.1em;
         }
-        #recenter-btn, #reset-directions, #show-location {
+        #recenter-btn, #reset-directions, #show-location, #toggle-satellite {
             background: #00509E;
             color: white;
             text-align: center;
@@ -109,6 +109,15 @@
             z-index: 10;
             display: none;
         }
+        .building-label {
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            text-shadow: 1px 1px 3px #000;
+            padding: 2px 5px;
+            background-color: rgba(0, 80, 158, 0.7);
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -124,6 +133,7 @@
         
         <button id="recenter-btn">Reset View</button>
         <button id="show-location">Show My Location</button>
+        <button id="toggle-satellite">Toggle Satellite View</button>
         <button id="reset-directions" style="display:none;">Clear Directions</button>
         
         <!-- Directions Panel -->
@@ -176,6 +186,7 @@
         let directionsRenderer;
         let userLocationMarker;
         let selectedBuilding = null;
+        let isSatelliteView = false;
 
         // All buildings data
         const BUILDINGS = [
@@ -208,22 +219,16 @@
             BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
 
             map = new google.maps.Map(document.getElementById("map"), {
-                mapId: "841c37f9fffb3a1c",
+                center: { lat: 53.771, lng: -0.368 },
+                zoom: 17,
+                mapTypeId: 'hybrid', // Start with satellite+labels view
                 disableDefaultUI: true,
                 gestureHandling: "greedy",
                 restriction: {
                     latLngBounds: bounds,
                     strictBounds: true
-                },
-                styles: [
-                    { featureType: "poi", stylers: [{ visibility: "off" }] },
-                    { featureType: "transit", stylers: [{ visibility: "off" }] },
-                    { featureType: "landscape", stylers: [{ color: "#f5f5f5" }] }
-                ]
+                }
             });
-
-            // Set initial view to fit boundary
-            map.fitBounds(bounds);
 
             // Add invisible cropping polygon
             new google.maps.Polygon({
@@ -238,12 +243,17 @@
             directionsRenderer = new google.maps.DirectionsRenderer({
                 map: map,
                 suppressMarkers: true,
-                preserveViewport: true
+                preserveViewport: true,
+                polylineOptions: {
+                    strokeColor: "#FF0000",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 5
+                }
             });
 
             // Add markers with optimized rendering
             BUILDINGS.forEach(location => {
-                new google.maps.Marker({
+                const marker = new google.maps.Marker({
                     position: { lat: location.lat, lng: location.lng },
                     map: map,
                     title: location.title,
@@ -257,6 +267,20 @@
                         optimized: true
                     },
                     zIndex: google.maps.Marker.MAX_ZINDEX + 1
+                });
+
+                // Add building labels
+                const label = new google.maps.InfoWindow({
+                    content: `<div class="building-label">${location.title}</div>`,
+                    disableAutoPan: true
+                });
+                
+                marker.addListener("mouseover", () => {
+                    label.open(map, marker);
+                });
+                
+                marker.addListener("mouseout", () => {
+                    label.close();
                 });
             });
 
@@ -311,6 +335,14 @@
                     updateDebugInfo("No location available");
                     getUserLocation(true); // Force try again
                 }
+            });
+
+            // Toggle satellite view button
+            document.getElementById("toggle-satellite").addEventListener("click", () => {
+                isSatelliteView = !isSatelliteView;
+                map.setMapTypeId(isSatelliteView ? 'hybrid' : 'roadmap');
+                document.getElementById("toggle-satellite").textContent = 
+                    isSatelliteView ? "Show Map View" : "Show Satellite View";
             });
 
             // Reset directions button
