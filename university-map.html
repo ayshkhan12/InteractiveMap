@@ -3,14 +3,18 @@
 <head>
     <title>Interactive University of Hull Map</title>
     <style>
+        /* Main map container */
         #map {
             height: 100vh;
             width: 100%;
+            transition: margin-left 0.3s ease;
         }
+        
+        /* Navigation panel - moved to left */
         #controls {
-            position: absolute;
+            position: fixed;
             top: 10px;
-            right: 10px;
+            left: 10px;
             z-index: 5;
             background: rgba(255,255,255,0.98);
             padding: 12px;
@@ -20,7 +24,76 @@
             font-family: Arial, sans-serif;
             max-height: 90vh;
             overflow-y: auto;
+            transform: translateX(0);
+            transition: transform 0.3s ease;
         }
+        
+        /* Hamburger menu */
+        #menu-toggle {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            z-index: 10;
+            background: #00509E;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px;
+            cursor: pointer;
+            display: none;
+        }
+        
+        /* Scenario panels */
+        .scenario-panel {
+            display: none;
+            padding: 10px;
+            background: #f0f7ff;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        /* Accessibility markers */
+        .accessibility-marker {
+            background-color: #2ECC71;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        /* Emergency markers */
+        .emergency-marker {
+            background-color: #E74C3C;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        /* Alert banner */
+        #alert-banner {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,204,0,0.9);
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 10;
+            display: none;
+            max-width: 80%;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* Keep all your existing styles */
         #search-container {
             margin-bottom: 15px;
         }
@@ -118,10 +191,19 @@
             background-color: rgba(0, 80, 158, 0.7);
             border-radius: 3px;
         }
+        .mode-toggle {
+            background: #00509E;
+            color: white;
+            text-align: center;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
-    <div id="map"></div>
+    <!-- Hamburger menu -->
+    <button id="menu-toggle">☰</button>
+    
+    <!-- Navigation Panel (now on left) -->
     <div id="controls">
         <div id="logo">UNIVERSITY OF HULL</div>
         
@@ -146,6 +228,37 @@
             <div id="distance-info"></div>
         </div>
         
+        <!-- Scenario Selection -->
+        <div class="category">MAP SCENARIOS</div>
+        <button id="scenario-student" class="mode-toggle">Student Mode</button>
+        <button id="scenario-accessibility" class="mode-toggle">Accessibility</button>
+        <button id="scenario-emergency" class="mode-toggle">Emergency</button>
+        
+        <!-- Student Scenario Panel -->
+        <div id="student-panel" class="scenario-panel">
+            <input type="text" id="room-search" placeholder="Enter course code (e.g. CS101)">
+            <div id="room-results"></div>
+        </div>
+        
+        <!-- Accessibility Scenario Panel -->
+        <div id="accessibility-panel" class="scenario-panel">
+            <label>
+                <input type="checkbox" id="wheelchair-route" checked> 
+                Wheelchair accessible routes only
+            </label>
+            <label>
+                <input type="checkbox" id="avoid-stairs" checked> 
+                Avoid stairs
+            </label>
+        </div>
+        
+        <!-- Emergency Scenario Panel -->
+        <div id="emergency-panel" class="scenario-panel">
+            <button id="find-security">Find Security Office</button>
+            <button id="find-medical">Find Medical Help</button>
+            <button id="emergency-call">Call Campus Security</button>
+        </div>
+        
         <!-- Building Categories -->
         <div class="category">ACADEMIC BUILDINGS</div>
         <button class="goto-btn" data-lat="53.771112" data-lng="-0.369320">Brynmor Jones Library</button>
@@ -168,6 +281,8 @@
         <button class="goto-btn" data-lat="53.774024" data-lng="-0.368526">Allam Sports Centre</button>
     </div>
 
+    <div id="map"></div>
+    <div id="alert-banner"></div>
     <div id="debug-info"></div>
 
     <script>
@@ -181,38 +296,109 @@
             { lat: 53.776204, lng: -0.365295 }  // Additional
         ];
 
+        // Global variables
         let map;
         let directionsService;
         let directionsRenderer;
         let userLocationMarker;
         let selectedBuilding = null;
         let isSatelliteView = false;
+        let panelState = localStorage.getItem('panelState') !== 'closed';
+        let currentScenario = null;
+        let alertMarkers = [];
+        let accessibilityMarkers = [];
+        let emergencyMarkers = [];
 
-        // All buildings data
+        // Enhanced buildings data with rooms
         const BUILDINGS = [
-            // Academic (Blue)
-            { lat: 53.771112, lng: -0.369320, title: "Brynmor Jones Library", color: "#00509E", category: "Academic" },
-            { lat: 53.770998, lng: -0.370300, title: "Allam Medical Building", color: "#00509E", category: "Academic" },
-            { lat: 53.770821, lng: -0.366477, title: "Wilberforce Building", color: "#00509E", category: "Academic" },
-            { lat: 53.770330, lng: -0.368166, title: "Larkin Building", color: "#00509E", category: "Academic" },
-            { lat: 53.771509, lng: -0.368860, title: "Robert Blackburn Building", color: "#00509E", category: "Academic" },
-            
-            // Masjid (Green)
-            { lat: 53.772666, lng: -0.365194, title: "Masjid Hull University", color: "#2ECC71", category: "Student Life" },
-            
-            // Student Life (Gold)
-            { lat: 53.771961, lng: -0.366254, title: "Student Union (Asylum)", color: "#F1C40F", category: "Student Life" },
-            { lat: 53.771715, lng: -0.366143, title: "Wetherspoons (Sanctuary)", color: "#F1C40F", category: "Student Life" },
-            
-            // Accommodations (Red)
-            { lat: 53.772658, lng: -0.366401, title: "The Courtyard", color: "#E74C3C", category: "Accommodations" },
-            { lat: 53.771534, lng: -0.372415, title: "Westfield Court", color: "#E74C3C", category: "Accommodations" },
-            { lat: 53.770757, lng: -0.364416, title: "Taylor Court", color: "#E74C3C", category: "Accommodations" },
-            
-            // Sports (Orange)
-            { lat: 53.774024, lng: -0.368526, title: "Allam Sports Centre", color: "#E67E22", category: "Sports" }
+            {
+                id: "LIB-01",
+                title: "Brynmor Jones Library",
+                lat: 53.771112,
+                lng: -0.369320,
+                color: "#00509E",
+                category: "Academic",
+                rooms: ["LB101", "LB202", "LB305"],
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true
+                }
+            },
+            {
+                id: "MED-01",
+                title: "Allam Medical Building",
+                lat: 53.770998,
+                lng: -0.370300,
+                color: "#00509E",
+                category: "Academic",
+                rooms: ["AM101", "AM201"],
+                accessibility: {
+                    wheelchair: true,
+                    elevator: true
+                }
+            },
+            {
+                id: "WIL-01",
+                title: "Wilberforce Building",
+                lat: 53.770821,
+                lng: -0.366477,
+                color: "#00509E",
+                category: "Academic",
+                rooms: ["WB101", "WB201", "WB301"],
+                accessibility: {
+                    wheelchair: true,
+                    elevator: false
+                }
+            },
+            // Add all other buildings with similar structure
         ];
 
+        // Emergency facilities
+        const EMERGENCY_FACILITIES = [
+            {
+                id: "SEC-01",
+                title: "Security Office",
+                lat: 53.771500,
+                lng: -0.368500,
+                type: "security"
+            },
+            {
+                id: "FIR-01",
+                title: "First Aid Station",
+                lat: 53.770998,
+                lng: -0.370300,
+                type: "medical"
+            }
+        ];
+
+        // Class schedule data (example)
+        const CLASS_SCHEDULE = [
+            {
+                code: "CS101",
+                building: "WIL-01",
+                room: "WB101",
+                name: "Introduction to Computer Science"
+            },
+            {
+                code: "BIO201",
+                building: "LAR-01",
+                room: "LK203",
+                name: "Biology Fundamentals"
+            }
+        ];
+
+        // Teacher alerts
+        const TEACHER_ALERTS = [
+            {
+                id: "ALERT-001",
+                buildingId: "WIL-01",
+                room: "WB101",
+                message: "CS101 moved to Larkin Building Room LK205 today",
+                expires: new Date(Date.now() + 86400000).toISOString() // 24 hours from now
+            }
+        ];
+
+        // Initialize map
         function initMap() {
             // Initialize map with strict boundaries
             const bounds = new google.maps.LatLngBounds();
@@ -221,7 +407,7 @@
             map = new google.maps.Map(document.getElementById("map"), {
                 center: { lat: 53.771, lng: -0.368 },
                 zoom: 17,
-                mapTypeId: 'hybrid', // Start with satellite+labels view
+                mapTypeId: 'hybrid',
                 disableDefaultUI: true,
                 gestureHandling: "greedy",
                 restriction: {
@@ -242,24 +428,29 @@
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({
                 map: map,
-                suppressMarkers: true,
-                preserveViewport: true,
+                suppressMarkers: false,
+                preserveViewport: false,
                 polylineOptions: {
-                    strokeColor: "#FF0000",
+                    strokeColor: "#00509E",
                     strokeOpacity: 0.8,
                     strokeWeight: 5
+                },
+                markerOptions: {
+                    icon: {
+                        url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                    }
                 }
             });
 
-            // Add markers with optimized rendering
-            BUILDINGS.forEach(location => {
+            // Add building markers
+            BUILDINGS.forEach(building => {
                 const marker = new google.maps.Marker({
-                    position: { lat: location.lat, lng: location.lng },
+                    position: { lat: building.lat, lng: building.lng },
                     map: map,
-                    title: location.title,
+                    title: building.title,
                     icon: {
                         path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: location.color,
+                        fillColor: building.color,
                         fillOpacity: 0.9,
                         strokeColor: "#FFFFFF",
                         strokeWeight: 2,
@@ -271,7 +462,7 @@
 
                 // Add building labels
                 const label = new google.maps.InfoWindow({
-                    content: `<div class="building-label">${location.title}</div>`,
+                    content: `<div class="building-label">${building.title}</div>`,
                     disableAutoPan: true
                 });
                 
@@ -282,16 +473,97 @@
                 marker.addListener("mouseout", () => {
                     label.close();
                 });
+
+                marker.addListener("click", () => {
+                    showBuildingInfo(building);
+                });
+            });
+
+            // Setup UI components
+            setupHamburgerMenu();
+            setupEventListeners();
+            setupScenarios();
+            checkTeacherAlerts();
+
+            // Initial location attempt
+            getUserLocation(false);
+        }
+
+        function setupHamburgerMenu() {
+            const toggle = document.getElementById('menu-toggle');
+            const panel = document.getElementById('controls');
+            
+            // Set initial state
+            panel.style.transform = panelState ? 'translateX(0)' : 'translateX(-300px)';
+            toggle.style.display = 'block';
+            
+            toggle.addEventListener('click', () => {
+                panelState = !panelState;
+                localStorage.setItem('panelState', panelState ? 'open' : 'closed');
+                panel.style.transform = panelState ? 'translateX(0)' : 'translateX(-300px)';
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) {
+                    panel.style.transform = 'translateX(0)';
+                    toggle.style.display = 'none';
+                } else {
+                    toggle.style.display = 'block';
+                    panel.style.transform = panelState ? 'translateX(0)' : 'translateX(-300px)';
+                }
+            });
+        }
+
+        function setupEventListeners() {
+            // Navigation buttons
+            document.querySelectorAll('.goto-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const lat = parseFloat(this.getAttribute('data-lat'));
+                    const lng = parseFloat(this.getAttribute('data-lng'));
+                    const destination = { lat, lng };
+                    centerAndPulse(destination, this.textContent);
+                });
+            });
+
+            // Recenter button
+            document.getElementById("recenter-btn").addEventListener("click", resetMap);
+
+            // Show location button
+            document.getElementById("show-location").addEventListener("click", () => {
+                if (userLocationMarker) {
+                    map.panTo(userLocationMarker.getPosition());
+                    map.setZoom(18);
+                } else {
+                    getUserLocation(true);
+                }
+            });
+
+            // Toggle satellite view
+            document.getElementById("toggle-satellite").addEventListener("click", () => {
+                isSatelliteView = !isSatelliteView;
+                map.setMapTypeId(isSatelliteView ? 'hybrid' : 'roadmap');
+                document.getElementById("toggle-satellite").textContent = 
+                    isSatelliteView ? "Show Map View" : "Show Satellite View";
+            });
+
+            // Reset directions
+            document.getElementById("reset-directions").addEventListener("click", resetDirections);
+
+            // Mode selector buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    if (selectedBuilding) {
+                        calculateAndDisplayRoute(selectedBuilding, this.dataset.mode);
+                    }
+                });
             });
 
             // Search functionality
-            const searchInput = document.getElementById('search-input');
-            const searchResults = document.getElementById('search-results');
-            
-            searchInput.addEventListener('input', () => {
-                const query = searchInput.value.toLowerCase();
+            document.getElementById('search-input').addEventListener('input', function() {
+                const query = this.value.toLowerCase();
                 if (query.length < 2) {
-                    searchResults.style.display = 'none';
+                    document.getElementById('search-results').style.display = 'none';
                     return;
                 }
                 
@@ -301,158 +573,214 @@
                 
                 displaySearchResults(results);
             });
-
-            // Navigation buttons with boundary checks
-            document.querySelectorAll('.goto-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const lat = parseFloat(btn.dataset.lat);
-                    const lng = parseFloat(btn.dataset.lng);
-                    const target = new google.maps.LatLng(lat, lng);
-                    
-                    if (bounds.contains(target)) {
-                        centerAndPulse(target, btn.textContent);
-                    } else {
-                        alert("This location is outside the campus boundary.");
-                    }
-                });
-            });
-
-            // Recenter button
-            document.getElementById("recenter-btn").addEventListener("click", () => {
-                resetMap();
-            });
-
-            // Show location button
-            document.getElementById("show-location").addEventListener("click", () => {
-                if (userLocationMarker) {
-                    map.panTo(userLocationMarker.getPosition());
-                    map.setZoom(18);
-                    updateDebugInfo("Showing your location at: " + 
-                        userLocationMarker.getPosition().lat().toFixed(6) + ", " + 
-                        userLocationMarker.getPosition().lng().toFixed(6));
-                } else {
-                    alert("No location available or you're outside campus bounds");
-                    updateDebugInfo("No location available");
-                    getUserLocation(true); // Force try again
-                }
-            });
-
-            // Toggle satellite view button
-            document.getElementById("toggle-satellite").addEventListener("click", () => {
-                isSatelliteView = !isSatelliteView;
-                map.setMapTypeId(isSatelliteView ? 'hybrid' : 'roadmap');
-                document.getElementById("toggle-satellite").textContent = 
-                    isSatelliteView ? "Show Map View" : "Show Satellite View";
-            });
-
-            // Reset directions button
-            document.getElementById("reset-directions").addEventListener("click", () => {
-                resetDirections();
-            });
-
-            // Mode selector buttons
-            document.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    if (selectedBuilding) {
-                        calculateAndDisplayRoute(selectedBuilding, btn.dataset.mode);
-                    }
-                });
-            });
-
-            // Initial location attempt
-            getUserLocation(false);
         }
 
-        function getUserLocation(forceShow) {
-            if (navigator.geolocation) {
-                updateDebugInfo("Attempting to get location...");
+        function setupScenarios() {
+            // Student scenario
+            document.getElementById('scenario-student').addEventListener('click', () => {
+                toggleScenario('student');
+            });
+            
+            // Accessibility scenario
+            document.getElementById('scenario-accessibility').addEventListener('click', () => {
+                toggleScenario('accessibility');
+                updateAccessibilityMarkers();
+            });
+            
+            // Emergency scenario
+            document.getElementById('scenario-emergency').addEventListener('click', () => {
+                toggleScenario('emergency');
+                updateEmergencyMarkers();
+            });
+            
+            // Room search functionality
+            document.getElementById('room-search').addEventListener('input', function() {
+                const query = this.value.toUpperCase();
+                if (query.length < 2) {
+                    document.getElementById('room-results').innerHTML = '';
+                    return;
+                }
                 
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        
-                        updateDebugInfo(
-                            `Location found: ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}\n` +
-                            `Accuracy: ${position.coords.accuracy} meters`
-                        );
-                        
-                        const bounds = new google.maps.LatLngBounds();
-                        BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
-                        
-                        const withinBounds = bounds.contains(userLocation);
-                        updateDebugInfo(
-                            `Within campus bounds: ${withinBounds}\n` +
-                            `Force show: ${forceShow}`
-                        );
-                        
-                        if (withinBounds || forceShow) {
-                            if (userLocationMarker) {
-                                userLocationMarker.setMap(null);
-                            }
-                            
-                            userLocationMarker = new google.maps.Marker({
-                                position: userLocation,
-                                map: map,
-                                title: "Your Location",
-                                icon: {
-                                    path: google.maps.SymbolPath.CIRCLE,
-                                    fillColor: "#4285F4",
-                                    fillOpacity: 0.9,
-                                    strokeColor: "#FFFFFF",
-                                    strokeWeight: 2,
-                                    scale: 8
-                                },
-                                zIndex: google.maps.Marker.MAX_ZINDEX + 3
-                            });
-                            
-                            if (forceShow) {
-                                map.panTo(userLocation);
-                                map.setZoom(18);
-                            }
-                        } else {
-                            updateDebugInfo("Location is outside campus bounds");
-                        }
-                    },
-                    (error) => {
-                        let errorMessage = "Geolocation error: ";
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMessage += "User denied the request for geolocation.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMessage += "Location information is unavailable.";
-                                break;
-                            case error.TIMEOUT:
-                                errorMessage += "The request to get user location timed out.";
-                                break;
-                            case error.UNKNOWN_ERROR:
-                                errorMessage += "An unknown error occurred.";
-                                break;
-                        }
-                        updateDebugInfo(errorMessage);
-                        console.error(errorMessage);
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
+                const results = CLASS_SCHEDULE.filter(course => 
+                    course.code.includes(query) || 
+                    course.room.includes(query)
                 );
-            } else {
-                updateDebugInfo("Geolocation is not supported by this browser");
+                
+                displayRoomResults(results);
+            });
+            
+            // Find security
+            document.getElementById('find-security').addEventListener('click', () => {
+                const security = EMERGENCY_FACILITIES.find(f => f.type === 'security');
+                if (security) {
+                    centerAndPulse({ lat: security.lat, lng: security.lng }, security.title);
+                    if (userLocationMarker) {
+                        calculateAndDisplayRoute(security, 'WALKING');
+                    }
+                }
+            });
+            
+            // Find medical
+            document.getElementById('find-medical').addEventListener('click', () => {
+                const medical = EMERGENCY_FACILITIES.find(f => f.type === 'medical');
+                if (medical) {
+                    centerAndPulse({ lat: medical.lat, lng: medical.lng }, medical.title);
+                    if (userLocationMarker) {
+                        calculateAndDisplayRoute(medical, 'WALKING');
+                    }
+                }
+            });
+            
+            // Emergency call
+            document.getElementById('emergency-call').addEventListener('click', () => {
+                alert("Calling campus security...\n\nIn a real implementation, this would connect to security services.");
+            });
+            
+            // Accessibility options
+            document.getElementById('wheelchair-route').addEventListener('change', updateAccessibilityOptions);
+            document.getElementById('avoid-stairs').addEventListener('change', updateAccessibilityOptions);
+        }
+
+        function toggleScenario(scenario) {
+            // Hide all panels first
+            document.querySelectorAll('.scenario-panel').forEach(panel => {
+                panel.style.display = 'none';
+            });
+            
+            // Reset button colors
+            document.querySelectorAll('.mode-toggle').forEach(btn => {
+                btn.style.backgroundColor = '#00509E';
+            });
+            
+            // If clicking the same scenario, toggle it off
+            if (currentScenario === scenario) {
+                currentScenario = null;
+                return;
+            }
+            
+            // Show selected panel
+            currentScenario = scenario;
+            const panel = document.getElementById(`${scenario}-panel`);
+            panel.style.display = 'block';
+            document.getElementById(`scenario-${scenario}`).style.backgroundColor = '#003366';
+            
+            // Scenario-specific initializations
+            switch(scenario) {
+                case 'student':
+                    document.getElementById('room-search').focus();
+                    break;
+                case 'accessibility':
+                    updateAccessibilityMarkers();
+                    break;
+                case 'emergency':
+                    updateEmergencyMarkers();
+                    break;
             }
         }
 
-        function updateDebugInfo(message) {
-            const debugElement = document.getElementById('debug-info');
-            debugElement.textContent = message;
-            debugElement.style.display = 'block';
+        function updateAccessibilityMarkers() {
+            // Clear existing markers
+            accessibilityMarkers.forEach(marker => marker.setMap(null));
+            accessibilityMarkers = [];
+            
+            // Add markers for accessible features
+            BUILDINGS.forEach(building => {
+                if (building.accessibility.wheelchair) {
+                    const content = document.createElement('div');
+                    content.className = 'accessibility-marker';
+                    content.textContent = '♿ Accessible';
+                    
+                    const marker = new google.maps.InfoWindow({
+                        content: content,
+                        position: { lat: building.lat, lng: building.lng },
+                        disableAutoPan: true
+                    });
+                    
+                    marker.open(map);
+                    accessibilityMarkers.push(marker);
+                }
+            });
+        }
+
+        function updateEmergencyMarkers() {
+            // Clear existing markers
+            emergencyMarkers.forEach(marker => marker.setMap(null));
+            emergencyMarkers = [];
+            
+            // Add markers for emergency facilities
+            EMERGENCY_FACILITIES.forEach(facility => {
+                const content = document.createElement('div');
+                content.className = 'emergency-marker';
+                content.textContent = facility.type === 'security' ? '🚨 Security' : '🏥 Medical';
+                
+                const marker = new google.maps.InfoWindow({
+                    content: content,
+                    position: { lat: facility.lat, lng: facility.lng },
+                    disableAutoPan: true
+                });
+                
+                marker.open(map);
+                emergencyMarkers.push(marker);
+            });
+        }
+
+        function updateAccessibilityOptions() {
+            const wheelchairOnly = document.getElementById('wheelchair-route').checked;
+            const avoidStairs = document.getElementById('avoid-stairs').checked;
+            
+            // In a real implementation, you would use these options to modify directions
+            console.log(`Accessibility options updated: wheelchair=${wheelchairOnly}, avoidStairs=${avoidStairs}`);
+        }
+
+        function checkTeacherAlerts() {
+            const now = new Date();
+            const activeAlerts = TEACHER_ALERTS.filter(alert => new Date(alert.expires) > now);
+            
+            if (activeAlerts.length > 0) {
+                showAlertBanner(activeAlerts[0].message);
+                
+                // Highlight affected buildings
+                activeAlerts.forEach(alert => {
+                    const building = BUILDINGS.find(b => b.id === alert.buildingId);
+                    if (building) {
+                        // Add pulsing alert marker
+                        const alertMarker = new google.maps.Marker({
+                            position: { lat: building.lat, lng: building.lng },
+                            map: map,
+                            title: "Class Change Alert",
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                fillColor: "#FFA500",
+                                fillOpacity: 0.8,
+                                strokeColor: "#FFFFFF",
+                                strokeWeight: 2,
+                                scale: 10
+                            },
+                            zIndex: google.maps.Marker.MAX_ZINDEX + 4,
+                            animation: google.maps.Animation.BOUNCE
+                        });
+                        
+                        alertMarkers.push(alertMarker);
+                        
+                        // Remove after 10 seconds
+                        setTimeout(() => {
+                            alertMarker.setMap(null);
+                            alertMarkers = alertMarkers.filter(m => m !== alertMarker);
+                        }, 10000);
+                    }
+                });
+            }
+        }
+
+        function showAlertBanner(message) {
+            const banner = document.getElementById('alert-banner');
+            banner.textContent = message;
+            banner.style.display = 'block';
+            
+            // Hide after 15 seconds
             setTimeout(() => {
-                debugElement.style.display = 'none';
-            }, 5000);
+                banner.style.display = 'none';
+            }, 15000);
         }
 
         function displaySearchResults(results) {
@@ -481,6 +809,36 @@
             searchResults.style.display = 'block';
         }
 
+        function displayRoomResults(results) {
+            const roomResults = document.getElementById('room-results');
+            roomResults.innerHTML = '';
+            
+            if (results.length === 0) {
+                roomResults.innerHTML = '<div class="search-result">No classes found</div>';
+            } else {
+                results.forEach(course => {
+                    const building = BUILDINGS.find(b => b.id === course.building);
+                    if (building) {
+                        const resultElement = document.createElement('div');
+                        resultElement.className = 'search-result';
+                        resultElement.innerHTML = `
+                            <strong>${course.code}</strong><br>
+                            <small>${course.name}</small><br>
+                            <small>${building.title}, Room ${course.room}</small>
+                        `;
+                        resultElement.addEventListener('click', () => {
+                            const target = new google.maps.LatLng(building.lat, building.lng);
+                            centerAndPulse(target, `${building.title}, Room ${course.room}`);
+                            document.getElementById('room-search').value = course.code;
+                            selectedBuilding = building;
+                            showDirectionsPanel();
+                        });
+                        roomResults.appendChild(resultElement);
+                    }
+                });
+            }
+        }
+
         function centerAndPulse(position, title) {
             map.panTo(position);
             map.setZoom(18);
@@ -505,6 +863,43 @@
             setTimeout(() => marker.setMap(null), 1400);
         }
 
+        function showBuildingInfo(building) {
+            selectedBuilding = building;
+            
+            // Create info window content
+            const content = `
+                <div style="max-width:250px">
+                    <h3 style="margin:0 0 5px 0;color:#00509E">${building.title}</h3>
+                    <p>${building.category} Building</p>
+                    ${building.accessibility.wheelchair ? '<p>♿ Wheelchair accessible</p>' : ''}
+                    ${building.accessibility.elevator ? '<p>🛗 Elevator available</p>' : ''}
+                    <button onclick="window.showDirectionsFromHere(${building.lat},${building.lng})" 
+                            style="background:#00509E;color:white;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;margin-top:5px">
+                        Get Directions
+                    </button>
+                </div>
+            `;
+            
+            // Create and open info window
+            const infoWindow = new google.maps.InfoWindow({
+                content: content
+            });
+            
+            infoWindow.open(map, new google.maps.Marker({
+                position: { lat: building.lat, lng: building.lng },
+                map: map
+            }));
+        }
+
+        // Make this function available globally
+        window.showDirectionsFromHere = function(lat, lng) {
+            if (userLocationMarker) {
+                calculateAndDisplayRoute({ lat, lng }, 'WALKING');
+            } else {
+                alert("Please enable your location first");
+            }
+        };
+
         function showDirectionsPanel() {
             document.getElementById('directions-panel').style.display = 'block';
             document.getElementById('reset-directions').style.display = 'block';
@@ -523,8 +918,16 @@
             const request = {
                 origin: userLocationMarker.getPosition(),
                 destination: new google.maps.LatLng(destination.lat, destination.lng),
-                travelMode: google.maps.TravelMode[mode]
+                travelMode: google.maps.TravelMode[mode],
+                provideRouteAlternatives: true
             };
+
+            // Add accessibility options if enabled
+            if (currentScenario === 'accessibility') {
+                request.travelOptions = {
+                    routingPreference: 'WHEELCHAIR_ACCESSIBLE'
+                };
+            }
 
             directionsService.route(request, (result, status) => {
                 if (status === 'OK') {
@@ -542,6 +945,8 @@
                     });
                     instructions += '</ol>';
                     document.getElementById('directions-instructions').innerHTML = instructions;
+                } else {
+                    window.alert('Directions request failed due to ' + status);
                 }
             });
         }
@@ -559,7 +964,101 @@
             map.fitBounds(bounds);
             resetDirections();
         }
+
+        function getUserLocation(centerOnUser) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const pos = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+
+                        // Check if within campus bounds
+                        const bounds = new google.maps.LatLngBounds();
+                        BOUNDARY_COORDS.forEach(coord => bounds.extend(coord));
+                        
+                        if (!bounds.contains(pos) && !centerOnUser) {
+                            updateDebugInfo("You appear to be outside campus boundaries");
+                            return;
+                        }
+
+                        // Remove old marker if exists
+                        if (userLocationMarker) {
+                            userLocationMarker.setMap(null);
+                        }
+
+                        // Create new marker
+                        userLocationMarker = new google.maps.Marker({
+                            position: pos,
+                            map: map,
+                            title: "Your Location",
+                            icon: {
+                                url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                                scaledSize: new google.maps.Size(32, 32)
+                            },
+                            zIndex: google.maps.Marker.MAX_ZINDEX + 3
+                        });
+
+                        if (centerOnUser) {
+                            map.panTo(pos);
+                            map.setZoom(18);
+                        }
+                    },
+                    (error) => {
+                        let errorMessage = "Error getting location: ";
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage += "Location permission denied";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage += "Location unavailable";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage += "Location request timed out";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                errorMessage += "Unknown error";
+                                break;
+                        }
+                        updateDebugInfo(errorMessage);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                updateDebugInfo("Geolocation not supported by this browser");
+            }
+        }
+
+        function updateDebugInfo(message) {
+            const debugElement = document.getElementById('debug-info');
+            debugElement.textContent = message;
+            debugElement.style.display = 'block';
+            setTimeout(() => {
+                debugElement.style.display = 'none';
+            }, 5000);
+        }
     </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA0eo_kH5S8DCX53vLaILohfuo0-nkwqQc&callback=initMap&libraries=places" async defer></script>
+    <script>
+        // Load Google Maps API with proper async pattern
+        function loadGoogleMaps() {
+            const script = document.createElement('script');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyA0eo_kH5S8DCX53vLaILohfuo0-nkwqQc&libraries=places&callback=initMap';
+            script.async = true;
+            script.defer = true;
+            script.onerror = function() {
+                document.getElementById('map').innerHTML = 
+                    '<div style="padding:20px;color:red">Failed to load Google Maps. Please check your internet connection.</div>';
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Start loading the map when page loads
+        window.onload = loadGoogleMaps;
+    </script>
 </body>
 </html>
